@@ -1,4 +1,4 @@
-FROM rust:1.68.1 as rust-build-stage
+FROM rust:1.69-bullseye as rust-build-stage
 RUN apt-get update && apt-get upgrade -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -8,7 +8,7 @@ COPY Cargo.lock Cargo.toml ./
 COPY src src/
 RUN cargo build --release
 
-FROM rust-build-stage as rust-run-stage
+FROM debian:11.7-slim
 RUN addgroup --system rustapp \
     && adduser --system --ingroup rustapp rustapp
 USER rustapp
