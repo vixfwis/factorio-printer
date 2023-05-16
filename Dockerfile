@@ -8,7 +8,7 @@ COPY Cargo.lock Cargo.toml ./
 COPY src src/
 RUN cargo build --release
 
-FROM gcr.io/distroless/cc@sha256:f81e5db8287d66b012d874a6f7fea8da5b96d9cc509aa5a9b5d095a604d4bca1
+FROM gcr.io/distroless/cc-debian10
 USER nobody
 
 WORKDIR /app
