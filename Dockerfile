@@ -8,7 +8,7 @@ COPY Cargo.lock Cargo.toml ./
 COPY src src/
 RUN cargo build --release
 
-FROM debian:11.7-slim
+FROM gcr.io/distroless/cc
 RUN addgroup --system rustapp \
     && adduser --system --ingroup rustapp rustapp
 USER rustapp
