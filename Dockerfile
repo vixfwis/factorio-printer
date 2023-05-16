@@ -9,11 +9,9 @@ COPY src src/
 RUN cargo build --release
 
 FROM gcr.io/distroless/cc
-RUN addgroup --system rustapp \
-    && adduser --system --ingroup rustapp rustapp
-USER rustapp
+USER nobody
 
 WORKDIR /app
-COPY --from=rust-build-stage --chown=rustapp:rustapp /build/target/release/factorio-printer .
+COPY --from=rust-build-stage --chown=nobody:nogroup /build/target/release/factorio-printer .
 
 ENTRYPOINT ["/app/factorio-printer"]
