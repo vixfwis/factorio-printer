@@ -6,7 +6,7 @@ Arguments:
   [FILE]  Input image file. '-': stdin
 
 Options:
-  -o <FILE>                    Output image in PNG format. '-': stdout, '!': disable [default: output.png]
+  -o <FILE>                    Output image. '-': stdout, '!': disable [default: output.png]
   -b <FILE>                    Output blueprint. '-': stdout, '!': disable [default: blueprint.txt]
   -s, --scale <scale>          Scaling factor [default: 1.0]
   -p, --preset <preset>        Built-in tilesets [default: colorcoding] [possible values: base, colorcoding]

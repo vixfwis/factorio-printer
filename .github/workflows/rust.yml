@@ -18,7 +18,16 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   upload-assets:
-    runs-on: ubuntu-latest
+    runs-on: '${{ matrix.os }}'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            suffix: ''
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v2
@@ -27,7 +36,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: factorio-printer
