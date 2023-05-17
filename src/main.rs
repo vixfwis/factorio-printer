@@ -2,14 +2,15 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 mod printer;
 
 use clap::{Arg, ArgMatches, Command, value_parser};
-use image::io::Reader as ImageReader;
-use std::io::Write;
-use image::{ImageFormat, Rgba, RgbaImage};
+use std::io::{Read, Write, stdin, stdout, Cursor};
+use image::{Rgba, RgbaImage};
 use image::imageops::colorops::dither;
 use std::fs::File;
 use std::path::Path;
 use image::imageops::{CatmullRom, resize};
 use crate::printer::{FactorioBPStringBuilder, Tileset};
+
+type PrinterResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn extract_alpha(image: &RgbaImage) -> RgbaImage {
     let (dim_x, dim_y) = image.dimensions();
@@ -40,47 +41,147 @@ fn scale_image(mut image: RgbaImage, scale: f32) -> RgbaImage {
     image
 }
 
-fn process_image(input_image: &str, tileset: &Tileset, args: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+fn get_input_from_path(path: &str) -> PrinterResult<Box<dyn Read>> {
+    if path == "-" {
+        Ok(Box::new(stdin()))
+    } else {
+        let file = File::open(path)?;
+        Ok(Box::new(file))
+    }
+}
+
+fn get_output_from_path(path: &str) -> PrinterResult<Option<Box<dyn Write>>> {
+    if path == "-" {
+        Ok(Some(Box::new(stdout())))
+    } else if path == "!" {
+        Ok(None)
+    } else {
+        let file = File::create(path)?;
+        Ok(Some(Box::new(file)))
+    }
+}
+
+fn read_all(mut source: Box<dyn Read>) -> PrinterResult<Vec<u8>> {
+    let mut out = vec![];
+    let mut buf = [0u8; 2048];
+    loop {
+        let bytes_read = source.read(&mut buf)?;
+        out.extend_from_slice(&buf);
+        if bytes_read == 0 {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+fn process_image(
+    name: &str,
+    input: Box<dyn Read>,
+    out_img: Option<Box<dyn Write>>,
+    out_bp: Option<Box<dyn Write>>,
+    tileset: &Tileset,
+    args: &ArgMatches
+) -> PrinterResult<()> {
+    let image_buffer = read_all(input)?;
+    let format = image::guess_format(&image_buffer)?;
+    let mut image = image::load_from_memory_with_format(&image_buffer, format)?.to_rgba8();
     let scale = *args.get_one::<f32>("scale").expect("default scale value");
-    let mut image = scale_image(ImageReader::open(input_image)?.decode()?.into_rgba8(), scale);
+    image = scale_image(image, scale);
     // alpha channel gets overwritten by dithering, so we save a copy
     let alpha_layer = extract_alpha(&image);
     dither(&mut image, tileset);
-    match args.get_one::<String>("output_image") {
-        Some(path) => {
+
+    match out_bp {
+        Some(mut writer) => {
+            let alpha = *args.get_one::<u8>("alpha").expect("alpha default value");
+            let split = *args.get_one::<i32>("split").expect("split default value");
+            let builder =
+                FactorioBPStringBuilder::new(name, &image, &alpha_layer, tileset)
+                .alpha_threshold(alpha)
+                .split(split);
+            let export_string = match builder.factorio_serialize() {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("error exporting blueprint: {}", e);
+                    std::process::exit(-1)
+                }
+            };
+            writer.write_all(export_string.as_bytes())?;
+        },
+        None => {}
+    }
+
+    match out_img {
+        Some(mut writer) => {
             apply_alpha(&mut image, &alpha_layer);
-            match image.save_with_format(path, ImageFormat::Png) {
-                Ok(_) => {}
-                Err(e) => { eprintln!("error writing image file: {}", e) }
+            let mut buf = Cursor::new(vec![]);
+            image.write_to(&mut buf, format)?;
+            writer.write_all(buf.get_ref())?;
+        },
+        None => {}
+    }
+
+    Ok(())
+}
+
+fn parse_args(args: &ArgMatches) -> PrinterResult<()> {
+    let mut tileset = Tileset::preset_color_coding();
+
+    match args.get_one::<String>("preset") {
+        Some(preset) => {
+            if preset == "base" {
+                tileset = Tileset::preset_base_game();
             }
         }
         None => {}
     }
 
-    let file_name = Path::new(input_image)
-        .file_name()
-        .expect("there is no filename") // image would've failed earlier if None
-        .to_str()
-        .expect("valid unicode name");
-    let export_string =
-        match FactorioBPStringBuilder::new(file_name, &image, &alpha_layer, tileset)
-            .alpha_threshold(*args.get_one::<u8>("alpha").expect("alpha default value"))
-            .split(*args.get_one::<i32>("split").expect("split default value"))
-            .factorio_serialize() {
-            Ok(e) => e,
-            Err(e) => {
-                eprintln!("error exporting blueprint: {}", e);
-                std::process::exit(-1)
-            }
-        };
-
-    match args.get_one::<String>("output_blueprint") {
+    match args.get_one::<String>("tileset") {
         Some(path) => {
-            let mut file = File::create(path).unwrap();
-            match file.write(export_string.as_bytes()) {
-                Ok(_) => {}
-                Err(e) => { eprintln!("error writing blueprint file: {}", e) }
-            }
+            tileset = Tileset::from_file(path)?;
+        }
+        None => {}
+    }
+
+    match args.get_one::<String>("input_image") {
+        Some(path) => {
+            let input = get_input_from_path(path)?;
+            let name = if Path::new(path).is_file() {
+                Path::new(path)
+                    .file_name()
+                    .expect("valid filename")
+                    .to_str()
+                    .expect("valid unicode filename")
+                    .to_string()
+            } else {
+                "Printed image".to_string()
+            };
+            let out_img = match args.get_one::<String>("output_image") {
+                Some(path) => {
+                    match get_output_from_path(path)? {
+                        Some(out) => Some(out),
+                        None => None,
+                    }
+                },
+                None => None,
+            };
+            let out_bp = match args.get_one::<String>("output_blueprint") {
+                Some(path) => {
+                    match get_output_from_path(path)? {
+                        Some(out) => Some(out),
+                        None => None,
+                    }
+                },
+                None => None,
+            };
+            process_image(&name, input, out_img, out_bp, &tileset, &args)?;
+        }
+        None => {}
+    }
+
+    match args.get_one::<String>("export_tileset") {
+        Some(path) => {
+            tileset.to_file(path)?;
         }
         None => {}
     }
@@ -96,17 +197,17 @@ fn main() {
         .arg(Arg::new("input_image")
             .index(1)
             .value_name("FILE")
-            .help("Input image file")
+            .help("Input image file. '-': stdin")
             .required(false))
         .arg(Arg::new("output_image")
             .short('o')
             .value_name("FILE")
-            .help("Output image in PNG format")
+            .help("Output image. '-': stdout, '!': disable")
             .default_value("output.png"))
         .arg(Arg::new("output_blueprint")
              .short('b')
              .value_name("FILE")
-             .help("Output blueprint")
+             .help("Output blueprint. '-': stdout, '!': disable")
              .default_value("blueprint.txt"))
         .arg(Arg::new("scale")
             .short('s')
@@ -142,54 +243,11 @@ fn main() {
             .help("Split blueprint into squares of <SIDE>^2 size. 0 means no splitting")
             .default_value("0"));
     let args = cmd.get_matches();
-
-    let mut tileset = Tileset::preset_color_coding();
-
-    match args.get_one::<String>("preset") {
-        Some(preset) => {
-            if preset == "base" {
-                tileset = Tileset::preset_base_game();
-            }
+    match parse_args(&args) {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(-1)
         }
-        None => {}
-    }
-
-    match args.get_one::<String>("tileset") {
-        Some(path) => {
-            tileset = match Tileset::from_file(path) {
-                Ok(e) => e,
-                Err(e) => {
-                    eprintln!("error saving tileset: {}", e);
-                    std::process::exit(-1)
-                }
-            }
-        }
-        None => {}
-    }
-
-    match args.get_one::<String>("input_image") {
-        Some(path) => {
-            match process_image(path, &tileset, &args) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error in process_image: {}", e);
-                    std::process::exit(-1)
-                }
-            }
-        }
-        None => {}
-    }
-
-    match args.get_one::<String>("export_tileset") {
-        Some(path) => {
-            match tileset.to_file(path) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("error saving tileset: {}", e);
-                    std::process::exit(-1)
-                }
-            }
-        }
-        None => {}
     }
 }

@@ -8,6 +8,7 @@ use base64::engine::general_purpose::STANDARD as B64Engine;
 use std::io::Write;
 use base64::Engine;
 use crate::printer::schema::{FactorioBlueprint, FactorioBook};
+use crate::PrinterResult;
 
 mod schema;
 
@@ -99,7 +100,7 @@ impl Tileset {
         Self::from_const(&TILESET_COLOR_CODING)
     }
 
-    pub fn to_file(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn to_file(&self, path: &str) -> PrinterResult<()> {
         let mut writer = csv::Writer::from_path(path)?;
         for tile in &self.tiles {
             writer.serialize(tile)?;
@@ -107,7 +108,7 @@ impl Tileset {
         Ok(())
     }
 
-    pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_file(path: &str) -> PrinterResult<Self> {
         let mut tiles = vec![];
         let mut reader = csv::Reader::from_path(path)?;
         for row in reader.deserialize() {
@@ -272,7 +273,7 @@ impl FactorioBPStringBuilder<'_> {
         book
     }
 
-    pub fn factorio_serialize(&self) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn factorio_serialize(&self) -> PrinterResult<String> {
         let json_std = if self.split_count_x == 1 {
             serde_json::to_string(&self.make_blueprints()[0])?
         } else {

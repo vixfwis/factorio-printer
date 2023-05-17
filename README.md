@@ -3,17 +3,18 @@
 Usage: factorio-printer [OPTIONS] [FILE]
 
 Arguments:
-[FILE]  Input image file
+  [FILE]  Input image file. '-': stdin
 
 Options:
--o <FILE>                    Output image in PNG format [default: output.png]
--b <FILE>                    Output blueprint [default: blueprint.txt]
--s, --scale <scale>          Scaling factor [default: 1.0]
--p, --preset <preset>        Built-in tilesets [default: colorcoding] [possible values: base, colorcoding]
--t, --tileset <FILE>         Alternative tileset
---export-tileset <FILE>  Export current tileset in CSV format
---alpha <VALUE>          Pixels with alpha channel less that <VALUE> are skipped [default: 128]
---split <SIDE>           Split blueprint into squares of <SIDE>^2 size. 0 means no splitting [default: 0]
+  -o <FILE>                    Output image in PNG format. '-': stdout, '!': disable [default: output.png]
+  -b <FILE>                    Output blueprint. '-': stdout, '!': disable [default: blueprint.txt]
+  -s, --scale <scale>          Scaling factor [default: 1.0]
+  -p, --preset <preset>        Built-in tilesets [default: colorcoding] [possible values: base, colorcoding]
+  -t, --tileset <FILE>         Alternative tileset
+      --export-tileset <FILE>  Export current tileset in CSV format
+      --alpha <VALUE>          Pixels with alpha channel less that <VALUE> are skipped [default: 128]
+      --split <SIDE>           Split blueprint into squares of <SIDE>^2 size. 0 means no splitting [default: 0]
+  -h, --help                   Print help
 ```
 
 ##### Tileset
