@@ -9,9 +9,9 @@ COPY src src/
 RUN cargo build --release
 
 FROM gcr.io/distroless/cc-debian10
-USER nobody
+USER 1001:1001
 
 WORKDIR /app
-COPY --from=rust-build-stage --chown=nobody:nogroup /build/target/release/factorio-printer .
+COPY --from=rust-build-stage --chown=1001:1001 /build/target/release/factorio-printer .
 
 ENTRYPOINT ["/app/factorio-printer"]
