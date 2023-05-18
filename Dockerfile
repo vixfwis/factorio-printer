@@ -8,12 +8,10 @@ COPY Cargo.lock Cargo.toml ./
 COPY src src/
 RUN cargo build --release
 
-FROM debian:11.7-slim
-RUN addgroup --system rustapp \
-    && adduser --system --ingroup rustapp rustapp
-USER rustapp
+FROM gcr.io/distroless/cc-debian10
+USER 1001:1001
 
 WORKDIR /app
-COPY --from=rust-build-stage --chown=rustapp:rustapp /build/target/release/factorio-printer .
+COPY --from=rust-build-stage --chown=1001:1001 /build/target/release/factorio-printer .
 
 ENTRYPOINT ["/app/factorio-printer"]
