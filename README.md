@@ -1,13 +1,17 @@
 ### Factorio image (blue)printing tool
 ```
+Factorio image (blue)printing tool
+FILE inputs support '-' for stdin
+FILE outputs support '-' for stdin, '!' to disable
+
 Usage: factorio-printer [OPTIONS] [FILE]
 
 Arguments:
-  [FILE]  Input image file. '-': stdin
+  [FILE]  Input image file
 
 Options:
-  -o <FILE>                    Output image. '-': stdout, '!': disable [default: output.png]
-  -b <FILE>                    Output blueprint. '-': stdout, '!': disable [default: blueprint.txt]
+  -o <FILE>                    Output image [default: output.png]
+  -b <FILE>                    Output blueprint [default: blueprint.txt]
   -s, --scale <scale>          Scaling factor [default: 1.0]
   -p, --preset <preset>        Built-in tilesets [default: colorcoding] [possible values: base, colorcoding]
   -t, --tileset <FILE>         Alternative tileset

@@ -1,11 +1,11 @@
-use image::{Pixel, Rgb, Rgba, RgbaImage};
+use image::{EncodableLayout, Pixel, Rgb, Rgba, RgbaImage};
 use image::imageops::ColorMap;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use base64::engine::general_purpose::STANDARD as B64Engine;
-use std::io::Write;
+use std::io::{Read, Write};
 use base64::Engine;
 use crate::printer::schema::{FactorioBlueprint, FactorioBook};
 use crate::PrinterResult;
@@ -50,7 +50,7 @@ const TILESET_COLOR_CODING: [(u8, u8, u8, &str, bool); 20] = [
     (123, 125, 123, "refined-concrete-white", true),
 ];
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Tile {
     red: u8,
     green: u8,
@@ -100,12 +100,32 @@ impl Tileset {
         Self::from_const(&TILESET_COLOR_CODING)
     }
 
+    pub fn write(&self, dst: Box<dyn Write>) -> PrinterResult<()> {
+        let mut writer = csv::Writer::from_writer(dst);
+        for tile in &self.tiles {
+            writer.serialize(tile)?;
+        }
+        Ok(())
+    }
+
     pub fn to_file(&self, path: &str) -> PrinterResult<()> {
         let mut writer = csv::Writer::from_path(path)?;
         for tile in &self.tiles {
             writer.serialize(tile)?;
         }
         Ok(())
+    }
+
+    pub fn read(src: Box<dyn Read>) -> PrinterResult<Self> {
+        let mut tiles = vec![];
+        let data = read_all(src)?;
+        let mut reader = csv::ReaderBuilder::new()
+            .from_reader(data.as_bytes());
+        for row in reader.deserialize() {
+            let tile: Tile = row?;
+            tiles.push(tile);
+        }
+        Ok(Tileset { tiles })
     }
 
     pub fn from_file(path: &str) -> PrinterResult<Self> {
@@ -286,6 +306,19 @@ impl FactorioBPStringBuilder<'_> {
         let out = B64Engine.encode(compr);
         Ok(format!("0{}", out))
     }
+}
+
+pub fn read_all(mut source: Box<dyn Read>) -> PrinterResult<Vec<u8>> {
+    let mut out = vec![];
+    let mut buf = [0u8; 2048];
+    loop {
+        let bytes_read = source.read(&mut buf)?;
+        out.extend_from_slice(&buf[0..bytes_read]);
+        if bytes_read == 0 {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 

@@ -61,19 +61,6 @@ fn get_output_from_path(path: &str) -> PrinterResult<Option<Box<dyn Write>>> {
     }
 }
 
-fn read_all(mut source: Box<dyn Read>) -> PrinterResult<Vec<u8>> {
-    let mut out = vec![];
-    let mut buf = [0u8; 2048];
-    loop {
-        let bytes_read = source.read(&mut buf)?;
-        out.extend_from_slice(&buf);
-        if bytes_read == 0 {
-            break;
-        }
-    }
-    Ok(out)
-}
-
 fn process_image(
     name: &str,
     input: Box<dyn Read>,
@@ -82,7 +69,7 @@ fn process_image(
     tileset: &Tileset,
     args: &ArgMatches
 ) -> PrinterResult<()> {
-    let image_buffer = read_all(input)?;
+    let image_buffer = printer::read_all(input)?;
     let format = image::guess_format(&image_buffer)?;
     let mut image = image::load_from_memory_with_format(&image_buffer, format)?.to_rgba8();
     let scale = *args.get_one::<f32>("scale").expect("default scale value");
@@ -138,7 +125,8 @@ fn parse_args(args: &ArgMatches) -> PrinterResult<()> {
 
     match args.get_one::<String>("tileset") {
         Some(path) => {
-            tileset = Tileset::from_file(path)?;
+            let input = get_input_from_path(path)?;
+            tileset = Tileset::read(input)?;
         }
         None => {}
     }
@@ -181,7 +169,13 @@ fn parse_args(args: &ArgMatches) -> PrinterResult<()> {
 
     match args.get_one::<String>("export_tileset") {
         Some(path) => {
-            tileset.to_file(path)?;
+            let output = get_output_from_path(path)?;
+            match output {
+                Some(output) => {
+                    tileset.write(output)?;
+                },
+                None => {}
+            }
         }
         None => {}
     }
@@ -191,23 +185,26 @@ fn parse_args(args: &ArgMatches) -> PrinterResult<()> {
 fn main() {
     let cmd = Command::new("Factorio Printer")
         .version(VERSION)
-        .about("Factorio image (blue)printing tool")
+        .about("Factorio image (blue)printing tool\n\
+        FILE inputs support '-' for stdin\n\
+        FILE outputs support '-' for stdin, '!' to disable\
+        ")
         .arg_required_else_help(true)
         .disable_version_flag(true)
         .arg(Arg::new("input_image")
             .index(1)
             .value_name("FILE")
-            .help("Input image file. '-': stdin")
+            .help("Input image file")
             .required(false))
         .arg(Arg::new("output_image")
             .short('o')
             .value_name("FILE")
-            .help("Output image. '-': stdout, '!': disable")
+            .help("Output image")
             .default_value("output.png"))
         .arg(Arg::new("output_blueprint")
              .short('b')
              .value_name("FILE")
-             .help("Output blueprint. '-': stdout, '!': disable")
+             .help("Output blueprint")
              .default_value("blueprint.txt"))
         .arg(Arg::new("scale")
             .short('s')
